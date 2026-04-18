@@ -1,0 +1,7 @@
+- [ ] T001 Plain leading ID
+- [x] **SC-001** Emphasized leading ID
+- [ ] `REQ-42` Inline code should not count
+- [ ] Prefix REQ-99 Non-leading ID should not count
+- [ ] REQ-42: Valid separator after ID
+- [ ] req-77 Lowercase IDs should not count
+- [ ] T001 Duplicate ID remains distinct by runtime key

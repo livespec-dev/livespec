@@ -1,12 +1,15 @@
-# Worktrees
-.worktrees/
-
-# Dependencies
 node_modules/
-
-# Build output
 dist/
+coverage/
+*.tsbuildinfo
+packages/*/dist/
+packages/*/coverage/
+packages/vscode/webview/dist/
+packages/vscode/.vite/
+.pnpm-store/
+pnpm-debug.log*
+npm-debug.log*
+.worktrees/
+.vscode-test/
 *.vsix
-
-# IDE
-.idea/
+.DS_Store

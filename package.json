@@ -1,0 +1,36 @@
+{
+  "name": "livespec",
+  "private": true,
+  "version": "0.1.0",
+  "description": "LiveSpec workspace for the VS Code markdown spec viewer",
+  "packageManager": "pnpm@10.28.1",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter @livespec/core build && pnpm --filter @livespec/vscode build",
+    "test": "pnpm --filter @livespec/core test && pnpm --filter @livespec/vscode test",
+    "typecheck": "pnpm --filter @livespec/core typecheck && pnpm --filter @livespec/vscode typecheck",
+    "clean": "pnpm --filter @livespec/core clean && pnpm --filter @livespec/vscode clean"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.13.1",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@types/vscode": "^1.97.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^26.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5"
+  }
+}

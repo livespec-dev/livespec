@@ -1,0 +1,73 @@
+{
+  "name": "@livespec/vscode",
+  "displayName": "LiveSpec",
+  "version": "0.1.0",
+  "description": "LiveSpec VS Code extension",
+  "publisher": "livespec",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "vscode": "^1.97.0"
+  },
+  "main": "./dist/extension.cjs",
+  "files": [
+    "dist",
+    "webview/dist"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:livespec.copySelectedIds",
+    "onCommand:livespec.toggleIncompleteOnly",
+    "onCommand:livespec.editSource",
+    "onCommand:livespec.refresh",
+    "onCustomEditor:livespec.preview"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "livespec.copySelectedIds",
+        "title": "LiveSpec: Copy Selected IDs"
+      },
+      {
+        "command": "livespec.toggleIncompleteOnly",
+        "title": "LiveSpec: Toggle Incomplete Only"
+      },
+      {
+        "command": "livespec.editSource",
+        "title": "LiveSpec: Edit Source"
+      },
+      {
+        "command": "livespec.refresh",
+        "title": "LiveSpec: Refresh"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "livespec.preview",
+        "displayName": "LiveSpec",
+        "selector": [
+          {
+            "filenamePattern": "**/*.md"
+          }
+        ],
+        "priority": "option"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "pnpm --filter @livespec/core build && pnpm run build:extension && pnpm run build:webview",
+    "build:extension": "tsup src/extension.ts --format cjs --target node20 --out-dir dist --external vscode --sourcemap --minify-whitespace",
+    "build:webview": "vite build",
+    "test": "pnpm --filter @livespec/core build && vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p webview/tsconfig.json --noEmit",
+    "clean": "rm -rf dist coverage webview/dist"
+  },
+  "dependencies": {
+    "@livespec/core": "workspace:*",
+    "minimatch": "^10.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.0.0",
+    "remark-gfm": "^4.0.1"
+  }
+}

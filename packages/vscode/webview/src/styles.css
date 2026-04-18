@@ -1,0 +1,308 @@
+:root {
+  color-scheme: light dark;
+  font-family: var(--vscode-font-family);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  height: 100%;
+}
+
+body {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--vscode-sideBar-background) 60%, transparent),
+      transparent 24%
+    ),
+    var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.livespec-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.livespec-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--vscode-editor-background) 88%, var(--vscode-button-background)),
+      color-mix(in srgb, var(--vscode-editor-background) 78%, var(--vscode-sideBar-background))
+    );
+  backdrop-filter: blur(10px);
+}
+
+.livespec-toolbar-title {
+  min-width: 0;
+}
+
+.livespec-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.livespec-toolbar-title h1 {
+  margin: 0;
+  font-size: 1.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.livespec-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.livespec-progress-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  min-height: 36px;
+  border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vscode-textBlockQuote-background) 72%, transparent);
+  color: var(--vscode-textPreformat-foreground);
+}
+
+.livespec-toolbar-button {
+  min-height: 36px;
+  min-width: 44px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--vscode-button-border) 75%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vscode-button-secondaryBackground) 86%, transparent);
+  color: var(--vscode-button-secondaryForeground);
+  cursor: pointer;
+}
+
+.livespec-toolbar-button:hover:enabled {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.livespec-toolbar-button:focus-visible,
+.livespec-tracked-item:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+.livespec-toolbar-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.livespec-toolbar-button-primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.livespec-toolbar-button-primary:hover:enabled {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.livespec-content {
+  flex: 1;
+  overflow: auto;
+  padding: 24px 20px 32px;
+}
+
+.livespec-panel {
+  width: min(100%, 960px);
+  margin: 0 auto;
+}
+
+.livespec-document,
+.livespec-state-card {
+  border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 70%, transparent);
+  border-radius: 24px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--vscode-editor-background) 92%, transparent),
+      color-mix(in srgb, var(--vscode-editorWidget-background) 88%, transparent)
+    );
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--vscode-widget-shadow) 55%, transparent);
+}
+
+.livespec-state-card {
+  padding: 24px;
+}
+
+.livespec-state-card-danger {
+  border-color: color-mix(in srgb, var(--vscode-errorForeground) 55%, transparent);
+}
+
+.livespec-state-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.livespec-state-card p {
+  margin: 0 0 16px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.livespec-document {
+  padding: 24px;
+}
+
+.livespec-document > *:first-child {
+  margin-top: 0;
+}
+
+.livespec-document > *:last-child {
+  margin-bottom: 0;
+}
+
+.livespec-document a {
+  color: var(--vscode-textLink-foreground);
+}
+
+.livespec-document blockquote {
+  margin: 16px 0;
+  padding: 12px 16px;
+  border-left: 4px solid var(--vscode-textLink-foreground);
+  background: color-mix(in srgb, var(--vscode-textBlockQuote-background) 85%, transparent);
+}
+
+.livespec-document code {
+  padding: 0.15em 0.35em;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vscode-textCodeBlock-background) 85%, transparent);
+  color: var(--vscode-textPreformat-foreground);
+}
+
+.livespec-document pre {
+  overflow: auto;
+  padding: 16px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--vscode-textCodeBlock-background) 92%, transparent);
+}
+
+.livespec-document ul,
+.livespec-document ol {
+  padding-left: 22px;
+}
+
+.livespec-tracked-list-item {
+  list-style: none;
+  margin: 0 0 12px;
+  padding-left: 0;
+}
+
+.livespec-tracked-item {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 70%, transparent);
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground) 45%, transparent),
+      color-mix(in srgb, var(--vscode-editor-background) 92%, transparent)
+    );
+  cursor: pointer;
+}
+
+.livespec-tracked-item:hover {
+  border-color: color-mix(in srgb, var(--vscode-textLink-foreground) 45%, transparent);
+}
+
+.livespec-tracked-item.is-selected {
+  border-color: color-mix(in srgb, var(--vscode-focusBorder) 70%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--vscode-list-activeSelectionBackground) 70%, transparent),
+      color-mix(in srgb, var(--vscode-editor-background) 90%, transparent)
+    );
+}
+
+.livespec-tracked-item.is-complete {
+  opacity: 0.88;
+}
+
+.livespec-tracked-item-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85rem;
+}
+
+.livespec-tracked-item-id {
+  font-weight: 700;
+  color: var(--vscode-textLink-foreground);
+}
+
+.livespec-tracked-item-body > :first-child {
+  margin-top: 0;
+}
+
+.livespec-tracked-item-body > :last-child {
+  margin-bottom: 0;
+}
+
+.livespec-tracked-item-body input[type="checkbox"] {
+  margin-right: 10px;
+}
+
+[data-theme-kind="high-contrast"] .livespec-tracked-item,
+[data-theme-kind="high-contrast-light"] .livespec-tracked-item {
+  border-width: 2px;
+}
+
+@media (max-width: 720px) {
+  .livespec-toolbar {
+    padding: 16px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .livespec-toolbar-actions {
+    justify-content: flex-start;
+  }
+
+  .livespec-content {
+    padding: 16px 16px 24px;
+  }
+
+  .livespec-document,
+  .livespec-state-card {
+    border-radius: 20px;
+  }
+}
