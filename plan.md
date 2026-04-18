@@ -1,6 +1,6 @@
 # LiveSpec Plan
 
-This document is the current single source of truth for the LiveSpec plan. It supersedes earlier SpecLens design drafts.
+This document is the current single source of truth for the LiveSpec plan. It supersedes earlier design drafts for this viewer.
 
 ## Summary
 
@@ -22,7 +22,7 @@ Markdown remains the canonical authored format. Future "live" content should be 
 
 ## Product Direction
 
-- Rename the concept from `SpecLens` to `LiveSpec` everywhere: docs, package names, command IDs, CSS variables, view types, and internal types.
+- Keep the concept as `LiveSpec` everywhere: docs, package names, command IDs, CSS variables, view types, and internal types.
 - Keep the product centered on "spec as implemented today."
 - Treat future dynamic views as embedded, on-demand augmentations inside markdown, not as a separate mode.
 - Keep the initial experience intentionally simple: one file, one preview, one interaction model.
@@ -48,7 +48,6 @@ Markdown remains the canonical authored format. Future "live" content should be 
 - In-place markdown editing or WYSIWYG editing in V1
 - Arbitrary embedded JS / JSX in markdown
 - General plugin system
-- Heavy configuration surface
 
 If directory-level navigation is added later, it should be a separate VS Code `TreeView` or explorer contribution, not an in-webview outline sidebar.
 
@@ -76,7 +75,7 @@ The right simplification for V1 is a clean single-column preview with a compact 
 
 ### 3. Keep reuse in `core`, not a standalone renderer package
 
-Do not split the product around `@speclens/renderer` yet.
+Do not split the product around a standalone renderer package yet.
 
 The reusable part is the markdown parsing and document-model logic, not the whole UI shell. A better split is:
 
@@ -86,7 +85,6 @@ livespec/
 │   ├── core/          # @livespec/core
 │   │   ├── parse/
 │   │   ├── model/
-│   │   └── plugins/
 │   └── vscode/        # @livespec/vscode
 │       ├── src/       # extension host
 │       └── webview/   # React UI bundle
@@ -108,11 +106,25 @@ Reasons:
 Implementation notes:
 
 - Activate when a workspace contains a `specs/` directory or when a matching spec file is opened directly.
-- Register LiveSpec as the default editor for `**/specs/**/*.md`, not for arbitrary markdown.
+- Register LiveSpec as the default editor for the configured spec-file glob, not for arbitrary markdown.
+- Default the spec-file glob to `**/specs/**/*.md`.
+- Allow the spec-file glob to be overridden per repository in `.livespec/config.json`.
+- Files matching the glob should still open in LiveSpec even when they contain zero tracked items.
 - Support multiple editors per document from the start.
 - Sync from `workspace.onDidChangeTextDocument` instead of adding a separate file watcher. That already covers normal edits, undo/redo, and external changes flowing into the `TextDocument`.
+- Debounce reparsing and rerendering by about 200 ms so the document body and progress summary update from the same parsed snapshot.
 - Persist lightweight webview state with `getState` / `setState`, not `retainContextWhenHidden`.
 - Users should still be able to switch to the normal text editor via VS Code's `Open With...` flow.
+
+### Webview State
+
+Persist only lightweight, semantic state:
+
+- Selected tracked-item IDs
+- Incomplete-only toggle
+- Scroll restore anchor based on the first visible tracked item, with nearest source line as fallback
+
+Do not persist raw pixel scroll offsets. They are too fragile when the document changes between hide and reveal.
 
 ### Commands
 
@@ -122,6 +134,42 @@ Implementation notes:
 - `livespec.refresh`
 
 The user-facing label for source navigation should be `Edit Source`. That action means "open the underlying spec `.md` file in the normal text editor at the mapped source line."
+
+### Host / Webview Messages
+
+Keep message passing narrow, JSON-only, and represented as TypeScript discriminated unions.
+
+Host -> webview messages:
+
+- `documentUpdated({ text, version })`
+- `themeChanged`
+- `configChanged`
+
+Webview -> host messages:
+
+- `copySelectedIds({ ids })`
+- `editSource({ line })`
+- `selectionChanged({ ids })`
+- `ready`
+
+## Repository Configuration
+
+LiveSpec should support repository-specific configuration in `.livespec/config.json`.
+
+This file is the canonical place for repo-level LiveSpec behavior that can vary between codebases, such as:
+
+- Spec file locations
+- Tracked-item ID format
+- Other repo-specific parsing or discovery rules that should be shared by everyone working in the repository
+
+Configuration rules:
+
+- The config file should live at `.livespec/config.json` in the repository root
+- The default spec-file glob is `**/specs/**/*.md`
+- Repositories may override that default glob in `.livespec/config.json`
+- The config file should be checked into version control
+- The format should be JSON with schema validation and a top-level `version` field
+- VS Code-specific settings may still exist as editor-local overrides, but `.livespec/config.json` is the canonical repo contract
 
 ## Markdown Stack Recommendation
 
@@ -238,6 +286,14 @@ For V1, keep the existing ID shape unless we learn otherwise:
 
 The parser should stay isolated so broadening the pattern later is cheap.
 
+Parser contract for V1:
+
+- ID matching is case-sensitive
+- Leading inline whitespace before the first meaningful token is ignored
+- A leading ID may be wrapped in bold or italic markup and still count
+- A leading ID inside inline code does not count
+- A valid ID must be followed by end-of-text or a non-word separator such as whitespace or `:`
+
 ## UI Plan
 
 ### Layout
@@ -267,8 +323,11 @@ Toolbar contents:
 - Click: select one item
 - Ctrl/Cmd+Click: toggle one item
 - Shift+Click: range select
+- Tab / Shift+Tab: move keyboard focus across visible tracked items
+- Space: toggle the focused item in selection
 - Ctrl/Cmd+A: select all currently visible tracked items
 - Escape: clear selection
+- Every tracked item must be keyboard focusable
 - Hidden items are automatically removed from selection when the incomplete-only filter is applied
 
 ### Progress behavior
@@ -293,13 +352,26 @@ Preferred V1 behavior:
 
 This is more discoverable than hiding the feature behind a custom context menu.
 
+### Empty and degraded states
+
+- Documents with zero tracked items should be treated as a normal common case, not an empty or degraded state
+- When there are zero tracked items, render the markdown normally and do not add special "No tracked items" messaging or chrome
+- If the document is empty, show an explicit empty-document state
+- If the incomplete-only filter hides every tracked item, show a filtered-empty state while keeping whole-document progress unchanged
+- If tracked-item extraction or parsing fails, show a clear degraded state with source fallback instead of blanking the document
+
 ## Future Live Blocks
 
 This is where the "Live" part of LiveSpec starts to matter.
 
-There are at least two good future embedding options:
+The plan should keep two concerns separate:
 
-### Option A: Directives
+- Surface syntax: how a live block is authored in markdown
+- Resolution contract: how the extension host resolves and returns typed data for that block
+
+### Surface syntax options
+
+#### Option A: Directives
 
 Directives are a good fit for lightweight declarative live blocks, for example:
 
@@ -317,14 +389,14 @@ or:
 
 This option works well when the block is mostly "please render this known view with these typed attributes."
 
-### Option B: Fenced blocks with NX or another embedded language
+#### Option B: Fenced blocks with a dedicated embedded language
 
 This is the option I would be more likely to add first.
 
 Example:
 
 ~~~~md
-```nx
+```livespec
 <AppArchitecture root="src/app" focus="services" />
 ```
 ~~~~
@@ -332,8 +404,8 @@ Example:
 or, when metadata is useful, a directive plus a fenced block:
 
 ~~~~md
-:::livespec-view{engine="nx" title="Current backend architecture"}
-```nx
+:::livespec-view{engine="livespec" title="Current backend architecture"}
+```livespec
 <AppArchitecture root="src/app" focus="services" />
 ```
 :::
@@ -342,13 +414,17 @@ or, when metadata is useful, a directive plus a fenced block:
 This option is attractive because:
 
 - fenced code blocks are already a natural markdown escape hatch for foreign languages
-- the raw NX source remains visible and useful as a fallback
-- LiveSpec can render `nx` blocks as previews without making the whole document format MDX-like
-- NX content can grow richer over time without forcing markdown itself to become a programming language
+- the raw embedded source remains visible and useful as a fallback
+- LiveSpec can render `livespec` blocks as previews without making the whole document format MDX-like
+- the embedded language can grow richer over time without forcing markdown itself to become a programming language
 
-For now, the plan should assume that future live content may use either directives or fenced blocks, with fenced NX blocks being the more likely primary path.
+For now, the plan should assume that future live content may use either directives or fenced blocks, with fenced `livespec` blocks being the more likely primary path.
 
-Design rules:
+### Resolution contract
+
+Regardless of which surface syntax wins, the host-side resolution contract is the load-bearing design and should stay stable.
+
+Resolution rules:
 
 - Markdown stays readable even if a block cannot be resolved
 - The extension host, not the webview, resolves live block data
@@ -360,7 +436,7 @@ Design rules:
 Additional guidance:
 
 - Prefer directives when the embedded content is a simple typed request
-- Prefer fenced NX blocks when the embedded content needs a richer DSL
+- Prefer fenced `livespec` blocks when the embedded content needs a richer DSL
 - Always preserve a useful source fallback when preview rendering fails
 - Avoid moving to MDX unless the product truly needs arbitrary JSX and JavaScript in documents
 
@@ -398,8 +474,8 @@ Because this is a webview-based editor, security and platform fit should be part
 - Keep scripts and styles in external bundled files
 - Restrict `localResourceRoots`
 - Sanitize any workspace-derived content that becomes HTML
-- Use VS Code theme CSS variables
-- Test light, dark, and high-contrast themes
+- Use VS Code theme CSS variables from the first webview commit
+- Smoke-test light, dark, and high-contrast themes from Phase 1 onward
 - Keep message passing narrow and JSON-only
 
 LiveSpec clearly justifies a webview, but it should still follow normal VS Code webview discipline.
@@ -412,6 +488,7 @@ LiveSpec clearly justifies a webview, but it should still follow normal VS Code 
 - Scaffold the workspace
 - Create `@livespec/core`
 - Create the VS Code extension shell and webview bundle
+- Establish VS Code theme tokens and baseline light / dark / high-contrast support
 - Register the custom text editor and commands
 
 ### Phase 2: Markdown And Tracked Items
@@ -420,17 +497,18 @@ LiveSpec clearly justifies a webview, but it should still follow normal VS Code 
 - Build tracked item extraction
 - Render markdown in the webview
 - Add selection state, copy IDs, progress summary, and incomplete-only filtering
+- Lock down tracked-item edge cases with markdown fixture tests
 
 ### Phase 3: Editor Integration
 
 - Wire `onDidChangeTextDocument`
+- Add debounced document refresh
 - Implement `Edit Source` navigation
 - Preserve lightweight state across hides / reveals
 - Handle split editors cleanly
 
 ### Phase 4: Polish
 
-- Theme integration
 - Accessibility and keyboard polish
 - Error states
 - Performance checks on larger docs
@@ -439,7 +517,7 @@ LiveSpec clearly justifies a webview, but it should still follow normal VS Code 
 ### Phase 5: Live Blocks
 
 - Add support for future live blocks
-- Support `nx` fenced blocks or equivalent embedded-language blocks
+- Support `livespec` fenced blocks or equivalent embedded-language blocks
 - Optionally add `remark-directive` for declarative block syntax
 - Define block descriptor schema
 - Add extension-host provider interface
@@ -448,8 +526,10 @@ LiveSpec clearly justifies a webview, but it should still follow normal VS Code 
 ## Testing Plan
 
 - Unit tests for tracked-item parsing, ID extraction, and line mapping
+- Unit tests for tracked-item edge cases such as whitespace, emphasis, code spans, separators, and case sensitivity
 - Unit tests for live block descriptor extraction
 - Component tests for selection, filtering, and progress UI
+- Component tests for empty and degraded states
 - VS Code integration tests for editor registration, document refresh, and `Edit Source` navigation
 
 Use markdown fixture files heavily. The parser behavior is important enough to lock down with real examples.
@@ -464,7 +544,7 @@ The current plan is:
 - Keep `unified` / `remark` as the foundation
 - Prefer `react-markdown` over a hand-wired `rehype-react` render pipeline for V1
 - Use `Edit Source` as the user-facing name for returning from the rendered view to the authored markdown at the mapped line
-- Prefer fenced NX blocks or similarly explicit embedded-language blocks for richer future live content; directives remain a good lighter-weight option
+- Prefer fenced `livespec` blocks or similarly explicit embedded-language blocks for richer future live content; directives remain a good lighter-weight option
 - Treat any future rich editing as edit-on-demand and markdown-backed, not as full-document WYSIWYG mode
 
 That gives you a simpler V1 and a cleaner path to the future "live current-state views" idea.
