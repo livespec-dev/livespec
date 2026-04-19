@@ -16,13 +16,9 @@ body,
 }
 
 body {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--vscode-sideBar-background) 60%, transparent),
-      transparent 24%
-    ),
-    var(--vscode-editor-background);
+  /* Single flat surface — no gradient. The toolbar border-bottom
+     provides the only visual separation needed. */
+  background: var(--vscode-editor-background);
   color: var(--vscode-editor-foreground);
 }
 
@@ -39,150 +35,148 @@ select {
   min-height: 100%;
 }
 
+/* ── Toolbar ─────────────────────────────────────────────────────────────────
+   Height target: 35px (matches VS Code's editor action bars).
+   No gradient, no blur. A 1px border-bottom is the only separator.        */
+
 .livespec-toolbar {
   position: sticky;
   top: 0;
   z-index: 2;
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px;
   align-items: center;
-  padding: 16px 20px;
+  height: 35px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--vscode-panel-border);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--vscode-editor-background) 88%, var(--vscode-button-background)),
-      color-mix(in srgb, var(--vscode-editor-background) 78%, var(--vscode-sideBar-background))
-    );
-  backdrop-filter: blur(10px);
+  background: var(--vscode-editor-background);
+}
+
+/* "LIVESPEC" eyebrow is gone — replaced by a small icon in the title.
+   Keep the rule here with display:none in case it remains in HTML. */
+.livespec-eyebrow {
+  display: none;
 }
 
 .livespec-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-}
-
-.livespec-eyebrow {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  overflow: hidden;
 }
 
 .livespec-toolbar-title h1 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: var(--vscode-font-size, 13px);
+  font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--vscode-descriptionForeground);
 }
 
 .livespec-toolbar-actions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
+/* Progress — plain text, no pill border/background */
 .livespec-progress-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 12px;
-  min-height: 36px;
-  border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 70%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--vscode-textBlockQuote-background) 72%, transparent);
-  color: var(--vscode-textPreformat-foreground);
+  padding: 0 8px;
+  font-size: calc(var(--vscode-font-size, 13px) - 1px);
+  color: var(--vscode-descriptionForeground);
 }
+
+/* Vertical rule between progress and action buttons */
+.livespec-toolbar-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--vscode-panel-border);
+  margin: 0 2px;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────────
+   22px height, 2px radius — matches VS Code's editor action bar.
+   No border by default; border only on the primary action.                 */
 
 .livespec-toolbar-button {
-  min-height: 36px;
-  min-width: 44px;
-  padding: 0 14px;
-  border: 1px solid color-mix(in srgb, var(--vscode-button-border) 75%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--vscode-button-secondaryBackground) 86%, transparent);
-  color: var(--vscode-button-secondaryForeground);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
   cursor: pointer;
+  font-size: calc(var(--vscode-font-size, 13px) - 1px);
+  white-space: nowrap;
 }
 
 .livespec-toolbar-button:hover:enabled {
-  background: var(--vscode-button-secondaryHoverBackground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.livespec-toolbar-button:active:enabled {
+  background: var(--vscode-toolbar-activeBackground);
 }
 
 .livespec-toolbar-button:focus-visible,
 .livespec-tracked-item:focus-visible {
-  outline: 2px solid var(--vscode-focusBorder);
-  outline-offset: 2px;
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 
 .livespec-toolbar-button:disabled {
-  opacity: 0.55;
+  opacity: 0.4;
   cursor: default;
+}
+
+/* Active/toggled state — e.g. "Incomplete Only" when on */
+.livespec-toolbar-button-active {
+  color: var(--vscode-textLink-foreground);
 }
 
 .livespec-toolbar-button-primary {
   background: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
+  padding: 0 10px;
 }
 
 .livespec-toolbar-button-primary:hover:enabled {
   background: var(--vscode-button-hoverBackground);
 }
 
+/* ── Content area ─────────────────────────────────────────────────────────── */
+
 .livespec-content {
   flex: 1;
   overflow: auto;
-  padding: 24px 20px 32px;
+  padding: 20px 28px 40px;
 }
 
 .livespec-panel {
-  width: min(100%, 960px);
+  width: min(100%, 800px);
   margin: 0 auto;
 }
 
-.livespec-document,
-.livespec-state-card {
-  border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 70%, transparent);
-  border-radius: 24px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--vscode-editor-background) 92%, transparent),
-      color-mix(in srgb, var(--vscode-editorWidget-background) 88%, transparent)
-    );
-  box-shadow: 0 16px 40px color-mix(in srgb, var(--vscode-widget-shadow) 55%, transparent);
-}
-
-.livespec-state-card {
-  padding: 24px;
-}
-
-.livespec-state-card-danger {
-  border-color: color-mix(in srgb, var(--vscode-errorForeground) 55%, transparent);
-}
-
-.livespec-state-card h2 {
-  margin: 0 0 8px;
-  font-size: 1.1rem;
-}
-
-.livespec-state-card p {
-  margin: 0 0 16px;
-  color: var(--vscode-descriptionForeground);
-}
+/* ── Document ─────────────────────────────────────────────────────────────────
+   No outer card. Flat surface matching VS Code's own markdown preview.    */
 
 .livespec-document {
-  padding: 24px;
+  /* intentionally borderless and shadowless */
 }
 
-.livespec-document > *:first-child {
+.livespec-document>*:first-child {
   margin-top: 0;
 }
 
-.livespec-document > *:last-child {
+.livespec-document>*:last-child {
   margin-bottom: 0;
 }
 
@@ -190,119 +184,192 @@ select {
   color: var(--vscode-textLink-foreground);
 }
 
+.livespec-document a:hover {
+  color: var(--vscode-textLink-activeForeground);
+}
+
 .livespec-document blockquote {
   margin: 16px 0;
-  padding: 12px 16px;
-  border-left: 4px solid var(--vscode-textLink-foreground);
-  background: color-mix(in srgb, var(--vscode-textBlockQuote-background) 85%, transparent);
+  padding: 10px 16px;
+  border-left: 4px solid var(--vscode-textBlockQuote-border, var(--vscode-textLink-foreground));
+  background: var(--vscode-textBlockQuote-background);
+  color: var(--vscode-foreground);
 }
 
 .livespec-document code {
-  padding: 0.15em 0.35em;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--vscode-textCodeBlock-background) 85%, transparent);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background: var(--vscode-textCodeBlock-background);
   color: var(--vscode-textPreformat-foreground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.9em;
 }
 
 .livespec-document pre {
   overflow: auto;
-  padding: 16px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--vscode-textCodeBlock-background) 92%, transparent);
+  padding: 12px 16px;
+  border-radius: 4px;
+  /* down from 16px */
+  background: var(--vscode-textCodeBlock-background);
+}
+
+.livespec-document pre code {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
 }
 
 .livespec-document ul,
 .livespec-document ol {
-  padding-left: 22px;
+  padding-left: 20px;
 }
+
+.livespec-document h1,
+.livespec-document h2,
+.livespec-document h3 {
+  font-weight: 600;
+}
+
+/* ── State card (empty / error states) ───────────────────────────────────── */
+
+.livespec-state-card {
+  padding: 20px 0;
+}
+
+.livespec-state-card-danger {
+  color: var(--vscode-errorForeground);
+}
+
+.livespec-state-card h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.livespec-state-card p {
+  margin: 0 0 14px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* ── Tracked items ────────────────────────────────────────────────────────────
+   Flat rows with a left-border accent instead of rounded cards.
+   Body fills the row; meta (ID + line) sits at the right and fades in
+   on hover or selection so it doesn't clutter the reading experience.     */
 
 .livespec-tracked-list-item {
   list-style: none;
-  margin: 0 0 12px;
+  margin: 0 0 2px;
   padding-left: 0;
 }
 
 .livespec-tracked-item {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 70%, transparent);
-  border-radius: 18px;
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--vscode-list-inactiveSelectionBackground) 45%, transparent),
-      color-mix(in srgb, var(--vscode-editor-background) 92%, transparent)
-    );
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 10px;
+  border-left: 3px solid transparent;
+  border-radius: 0 2px 2px 0;
   cursor: pointer;
+  transition: background 80ms, border-color 80ms;
 }
 
 .livespec-tracked-item:hover {
-  border-color: color-mix(in srgb, var(--vscode-textLink-foreground) 45%, transparent);
+  background: var(--vscode-list-hoverBackground);
+  border-left-color: color-mix(in srgb, var(--vscode-textLink-foreground) 50%, transparent);
 }
 
 .livespec-tracked-item.is-selected {
-  border-color: color-mix(in srgb, var(--vscode-focusBorder) 70%, transparent);
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--vscode-list-activeSelectionBackground) 70%, transparent),
-      color-mix(in srgb, var(--vscode-editor-background) 90%, transparent)
-    );
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+  border-left-color: var(--vscode-focusBorder);
 }
 
 .livespec-tracked-item.is-complete {
-  opacity: 0.88;
+  opacity: 0.6;
 }
 
-.livespec-tracked-item-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.85rem;
+.livespec-tracked-item-body {
+  flex: 1;
+  min-width: 0;
 }
 
-.livespec-tracked-item-id {
-  font-weight: 700;
-  color: var(--vscode-textLink-foreground);
-}
-
-.livespec-tracked-item-body > :first-child {
+.livespec-tracked-item-body> :first-child {
   margin-top: 0;
 }
 
-.livespec-tracked-item-body > :last-child {
+.livespec-tracked-item-body> :last-child {
   margin-bottom: 0;
 }
 
 .livespec-tracked-item-body input[type="checkbox"] {
-  margin-right: 10px;
+  margin-right: 8px;
 }
 
-[data-theme-kind="high-contrast"] .livespec-tracked-item,
-[data-theme-kind="high-contrast-light"] .livespec-tracked-item {
-  border-width: 2px;
+/* Meta (ID + line) — right-aligned, fades in on hover/select */
+.livespec-tracked-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 100ms;
+  pointer-events: none;
+}
+
+.livespec-tracked-item:hover .livespec-tracked-item-meta,
+.livespec-tracked-item.is-selected .livespec-tracked-item-meta {
+  opacity: 1;
+}
+
+.livespec-tracked-item-id {
+  font-size: 0.78em;
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-textLink-foreground);
+  font-weight: 400;
+}
+
+.livespec-tracked-item.is-selected .livespec-tracked-item-id {
+  color: var(--vscode-list-activeSelectionForeground);
+  opacity: 0.8;
+}
+
+.livespec-tracked-item-line {
+  font-size: 0.75em;
+  font-family: var(--vscode-editor-font-family);
+  color: var(--vscode-descriptionForeground);
+}
+
+.livespec-tracked-item.is-selected .livespec-tracked-item-line {
+  color: var(--vscode-list-activeSelectionForeground);
+  opacity: 0.6;
+}
+
+/* Toolbar icon color */
+.livespec-toolbar-icon {
+  color: var(--vscode-descriptionForeground);
+  flex-shrink: 0;
+}
+
+[data-theme-kind="high-contrast"] .livespec-tracked-item.is-selected,
+[data-theme-kind="high-contrast-light"] .livespec-tracked-item.is-selected {
+  outline: 1px solid var(--vscode-contrastActiveBorder);
+  outline-offset: -1px;
 }
 
 @media (max-width: 720px) {
   .livespec-toolbar {
-    padding: 16px;
-    flex-direction: column;
-    align-items: stretch;
+    height: auto;
+    min-height: 35px;
+    padding: 4px 8px;
+    flex-wrap: wrap;
   }
 
   .livespec-toolbar-actions {
-    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 4px;
   }
 
   .livespec-content {
-    padding: 16px 16px 24px;
-  }
-
-  .livespec-document,
-  .livespec-state-card {
-    border-radius: 20px;
+    padding: 16px 16px 28px;
   }
 }

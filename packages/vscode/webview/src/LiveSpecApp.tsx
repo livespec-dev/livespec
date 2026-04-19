@@ -475,11 +475,13 @@ export const LiveSpecApp = ({
                   handleTrackedItemKeyDown(item, event);
                 }}
               >
+                {/* Body first so text flows naturally */}
+                <div className="livespec-tracked-item-body">{children}</div>
+                {/* Meta (ID + line) sits at the right; fades in on hover/select via CSS */}
                 <div className="livespec-tracked-item-meta">
                   <span className="livespec-tracked-item-id">{item.id}</span>
-                  <span className="livespec-tracked-item-line">Line {item.line}</span>
+                  <span className="livespec-tracked-item-line">:{item.line}</span>
                 </div>
-                <div className="livespec-tracked-item-body">{children}</div>
               </div>
             </li>
           );
@@ -514,14 +516,28 @@ export const LiveSpecApp = ({
     <div className="livespec-shell">
       <header className="livespec-toolbar">
         <div className="livespec-toolbar-title">
-          <span className="livespec-eyebrow">LiveSpec</span>
+          {/* Small LiveSpec indicator — no "LIVESPEC" eyebrow label needed */}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-label="LiveSpec"
+            className="livespec-toolbar-icon"
+          >
+            <circle cx="8" cy="8" r="3" />
+            <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1" />
+          </svg>
           <h1>{fileName}</h1>
         </div>
         <div className="livespec-toolbar-actions">
           <span className="livespec-progress-pill">{progressSummary}</span>
+          <div className="livespec-toolbar-divider" role="separator" />
           <button
             type="button"
-            className="livespec-toolbar-button"
+            className={`livespec-toolbar-button${incompleteOnly ? " livespec-toolbar-button-active" : ""}`}
+            aria-pressed={incompleteOnly}
+            title={incompleteOnly ? "Show all items" : "Show incomplete items only"}
             onClick={() => {
               setIncompleteOnly((currentValue) => !currentValue);
             }}
@@ -533,6 +549,7 @@ export const LiveSpecApp = ({
             className="livespec-toolbar-button"
             onClick={handleCopySelectedIds}
             disabled={selectedKeys.length === 0}
+            title="Copy selected IDs to clipboard"
           >
             Copy IDs
           </button>
