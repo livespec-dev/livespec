@@ -1,15 +1,4 @@
-## Purpose
-
-Define repository-level LiveSpec configuration, including how `.livespec/config.json` is loaded, validated, and used to determine effective spec discovery behavior.
-
-## Requirements
-
-### Requirement: LiveSpec reads repository configuration from `.livespec/config.json`
-The system SHALL use `.livespec/config.json` at the repository root as the canonical repository-level LiveSpec configuration file.
-
-#### Scenario: Load checked-in repo config
-- **WHEN** a repository contains `.livespec/config.json`
-- **THEN** LiveSpec loads repository behavior from that file for documents in the repository
+## MODIFIED Requirements
 
 ### Requirement: LiveSpec validates repository configuration
 The system SHALL require `.livespec/config.json` to be valid JSON with a top-level `version` field and SHALL validate supported repository settings including an optional `specRootDir`.
@@ -25,6 +14,8 @@ The system SHALL require `.livespec/config.json` to be valid JSON with a top-lev
 #### Scenario: Invalid spec root falls back safely
 - **WHEN** `.livespec/config.json` provides an unsupported or invalid `specRootDir` value
 - **THEN** LiveSpec falls back to the default root spec directory for discovery
+
+## ADDED Requirements
 
 ### Requirement: LiveSpec uses a default root spec directory
 The system SHALL default the effective root spec directory to repo-root `specs/` when no repository override is present.
@@ -43,3 +34,13 @@ The system SHALL let repositories override the default root spec directory in `.
 #### Scenario: Root resolution uses the containing repository
 - **WHEN** a markdown file belongs to a workspace with multiple repositories or folders
 - **THEN** LiveSpec resolves the effective root spec directory from the repository that contains that file
+
+## REMOVED Requirements
+
+### Requirement: LiveSpec uses a default spec-file glob
+**Reason**: Tree-based discovery needs a single explicit navigation root instead of a free-form glob.
+**Migration**: Move specs under repo-root `specs/` or configure `specRootDir` in `.livespec/config.json`.
+
+### Requirement: LiveSpec supports repository-specific spec-file globs
+**Reason**: LiveSpec now discovers specs from a configurable root spec directory rather than a free-form glob.
+**Migration**: Replace `specFileGlob` overrides with a repository-relative `specRootDir` override.

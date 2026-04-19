@@ -1,4 +1,4 @@
 {
   "version": 1,
-  "specFileGlob": "docs/specs/**/*.md"
+  "specRootDir": "docs/specs"
 }

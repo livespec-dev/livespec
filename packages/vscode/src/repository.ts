@@ -1,5 +1,4 @@
 import path from "node:path";
-import { minimatch } from "minimatch";
 import type { LiveSpecConfig } from "@livespec/core";
 
 const normalizePath = (value: string): string => value.split(path.sep).join("/");
@@ -37,23 +36,43 @@ export const findRepositoryRoot = async (
   }
 };
 
-export const matchesLiveSpecFile = (
+export const getRelativeSpecPath = (
   filePath: string,
   repositoryRoot: string,
   config: LiveSpecConfig
-): boolean => {
+): string | undefined => {
   const relativePath = normalizePath(path.relative(repositoryRoot, filePath));
 
   if (
     relativePath.length === 0 ||
     relativePath.startsWith("../") ||
-    relativePath === ".."
+    relativePath === ".." ||
+    !relativePath.toLowerCase().endsWith(".md")
   ) {
-    return false;
+    return undefined;
   }
 
-  return minimatch(relativePath, config.specFileGlob, {
-    nocase: false,
-    windowsPathsNoEscape: true
-  });
+  const normalizedRoot = normalizePath(config.specRootDir);
+
+  if (normalizedRoot === ".") {
+    return relativePath;
+  }
+
+  if (relativePath === normalizedRoot) {
+    return undefined;
+  }
+
+  const rootPrefix = `${normalizedRoot}/`;
+
+  if (!relativePath.startsWith(rootPrefix)) {
+    return undefined;
+  }
+
+  return relativePath.slice(rootPrefix.length);
 };
+
+export const matchesLiveSpecFile = (
+  filePath: string,
+  repositoryRoot: string,
+  config: LiveSpecConfig
+): boolean => getRelativeSpecPath(filePath, repositoryRoot, config) !== undefined;

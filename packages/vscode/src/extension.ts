@@ -2,14 +2,20 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
 import { defaultLiveSpecConfig, loadLiveSpecConfig } from "@livespec/core";
-import { COMMAND_IDS, LIVE_SPEC_VIEW_TYPE } from "./constants.js";
+import {
+  COMMAND_IDS,
+  LIVE_SPEC_TREE_VIEW_ID,
+  LIVE_SPEC_VIEW_TYPE
+} from "./constants.js";
 import { LiveSpecPanelRegistry, type LiveSpecPanelContext } from "./documentSync.js";
 import type { LiveSpecThemeKind, WebviewToHostMessage } from "./protocol.js";
+import { findRepositoryRoot, isLiveSpecConfigPath } from "./repository.js";
+import { type LiveSpecSpecEntry, LiveSpecSpecIndex } from "./specIndex.js";
 import {
-  findRepositoryRoot,
-  isLiveSpecConfigPath,
-  matchesLiveSpecFile
-} from "./repository.js";
+  type LiveSpecTreeFileNode,
+  type LiveSpecTreeNode,
+  LiveSpecTreeDataProvider
+} from "./specTree.js";
 import {
   buildLiveSpecWebviewHtml,
   getWebviewLocalResourceRoots
@@ -20,8 +26,12 @@ interface RepositoryContext {
   config: ReturnType<typeof defaultLiveSpecConfig>;
 }
 
+interface LiveSpecQuickPickItem extends vscode.QuickPickItem {
+  entry: LiveSpecSpecEntry;
+}
+
 class LiveSpecEditorProvider implements vscode.CustomTextEditorProvider {
-  constructor(private readonly extension: LiveSpecExtension) {}
+  constructor(private readonly extension: LiveSpecExtension) { }
 
   async resolveCustomTextEditor(
     document: vscode.TextDocument,
@@ -61,10 +71,11 @@ class LiveSpecEditorProvider implements vscode.CustomTextEditorProvider {
 export class LiveSpecExtension {
   readonly registry = new LiveSpecPanelRegistry();
   readonly provider = new LiveSpecEditorProvider(this);
-  readonly autoOpenedUris = new Set<string>();
-  readonly autoOpenInFlightUris = new Set<string>();
+  readonly specIndex = new LiveSpecSpecIndex();
+  readonly treeProvider = new LiveSpecTreeDataProvider(this.specIndex);
+  treeView: vscode.TreeView<LiveSpecTreeNode> | undefined;
 
-  constructor(readonly context: vscode.ExtensionContext) {}
+  constructor(readonly context: vscode.ExtensionContext) { }
 
   get themeKind(): LiveSpecThemeKind {
     switch (vscode.window.activeColorTheme.kind) {
@@ -81,7 +92,19 @@ export class LiveSpecExtension {
   }
 
   async activate(): Promise<void> {
+    this.treeView = vscode.window.createTreeView(LIVE_SPEC_TREE_VIEW_ID, {
+      treeDataProvider: this.treeProvider,
+      showCollapseAll: true
+    });
+
+    const markdownWatcher = this.registerMarkdownTreeRefreshWatcher("**/*.md");
+    const configWatcher = this.registerConfigWatcher("**/.livespec/config.json");
+
     this.context.subscriptions.push(
+      this.treeProvider,
+      this.treeView,
+      markdownWatcher,
+      configWatcher,
       vscode.window.registerCustomEditorProvider(
         LIVE_SPEC_VIEW_TYPE,
         this.provider,
@@ -92,6 +115,15 @@ export class LiveSpecExtension {
           supportsMultipleEditorsPerDocument: true
         }
       ),
+      vscode.commands.registerCommand(COMMAND_IDS.openSpec, (target?: LiveSpecSpecEntry) => {
+        return this.openSpec(target);
+      }),
+      vscode.commands.registerCommand(COMMAND_IDS.refreshSpecTree, () => {
+        return this.refreshSpecTree();
+      }),
+      vscode.commands.registerCommand(COMMAND_IDS.revealActiveSpec, () => {
+        return this.revealActiveSpec();
+      }),
       vscode.commands.registerCommand(COMMAND_IDS.copySelectedIds, () => {
         this.registry.requestOnActivePanel({ type: "requestCopySelectedIds" });
       }),
@@ -109,9 +141,6 @@ export class LiveSpecExtension {
           this.registry.postDocumentSnapshot(activePanel.document);
         }
       }),
-      vscode.workspace.onDidOpenTextDocument((document) => {
-        void this.maybeAutoOpen(document);
-      }),
       vscode.workspace.onDidChangeTextDocument((event) => {
         this.registry.scheduleDocumentSnapshot(event.document);
 
@@ -119,22 +148,12 @@ export class LiveSpecExtension {
           void this.handleConfigChange(event.document);
         }
       }),
-      vscode.workspace.onDidCloseTextDocument((document) => {
-        this.autoOpenedUris.delete(document.uri.toString());
-      }),
-      vscode.window.onDidChangeVisibleTextEditors((editors) => {
-        for (const editor of editors) {
-          void this.maybeAutoOpen(editor.document);
-        }
-      }),
       vscode.window.onDidChangeActiveColorTheme(() => {
         this.registry.broadcastTheme(this.themeKind);
       })
     );
 
-    for (const editor of vscode.window.visibleTextEditors) {
-      await this.maybeAutoOpen(editor.document);
-    }
+    await this.refreshSpecTree();
   }
 
   async handleWebviewMessage(
@@ -194,71 +213,8 @@ export class LiveSpecExtension {
     };
   }
 
-  private async closeTextTabsForUri(uri: vscode.Uri): Promise<void> {
-    const uriKey = uri.toString();
-    const tabsToClose = vscode.window.tabGroups.all.flatMap((group) =>
-      group.tabs.filter(
-        (tab) =>
-          tab.input instanceof vscode.TabInputText &&
-          tab.input.uri.toString() === uriKey
-      )
-    );
-
-    if (tabsToClose.length > 0) {
-      await vscode.window.tabGroups.close(tabsToClose, true);
-    }
-  }
-
-  private async maybeAutoOpen(document: vscode.TextDocument): Promise<void> {
-    const uriKey = document.uri.toString();
-
-    if (
-      document.uri.scheme !== "file" ||
-      document.languageId !== "markdown" ||
-      isLiveSpecConfigPath(document.uri.fsPath) ||
-      this.registry.hasOpenPanel(document.uri) ||
-      this.autoOpenedUris.has(uriKey) ||
-      this.autoOpenInFlightUris.has(uriKey)
-    ) {
-      return;
-    }
-
-    const repositoryContext = await this.resolveRepositoryContext(document.uri);
-
-    if (
-      repositoryContext === undefined ||
-      !matchesLiveSpecFile(
-        document.uri.fsPath,
-        repositoryContext.repositoryRoot,
-        repositoryContext.config
-      )
-    ) {
-      return;
-    }
-
-    this.autoOpenInFlightUris.add(uriKey);
-
-    try {
-      await vscode.commands.executeCommand("vscode.openWith", document.uri, LIVE_SPEC_VIEW_TYPE, {
-        preview: false,
-        viewColumn: vscode.window.activeTextEditor?.viewColumn
-      });
-      await this.closeTextTabsForUri(document.uri);
-      this.autoOpenedUris.add(uriKey);
-    } finally {
-      this.autoOpenInFlightUris.delete(uriKey);
-    }
-  }
-
   private async handleConfigChange(document: vscode.TextDocument): Promise<void> {
-    const repositoryRoot = path.dirname(path.dirname(document.uri.fsPath));
-    const configResult = await loadLiveSpecConfig(repositoryRoot);
-
-    this.registry.broadcastConfig(repositoryRoot, configResult.config);
-
-    for (const editor of vscode.window.visibleTextEditors) {
-      await this.maybeAutoOpen(editor.document);
-    }
+    await this.handleConfigPathChange(document.uri.fsPath);
   }
 
   private async openSource(
@@ -278,6 +234,155 @@ export class LiveSpecExtension {
     editor.selection = new vscode.Selection(position, position);
     editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   }
+
+  private async handleConfigPathChange(configPath: string): Promise<void> {
+    const repositoryRoot = path.dirname(path.dirname(configPath));
+    const configResult = await loadLiveSpecConfig(repositoryRoot);
+
+    this.registry.broadcastConfig(repositoryRoot, configResult.config);
+    await this.refreshSpecTree();
+  }
+
+  private registerMarkdownTreeRefreshWatcher(globPattern: string): vscode.FileSystemWatcher {
+    const watcher = vscode.workspace.createFileSystemWatcher(globPattern);
+    const refreshTree = () => {
+      void this.refreshSpecTree();
+    };
+
+    this.context.subscriptions.push(
+      watcher.onDidCreate(refreshTree),
+      watcher.onDidDelete(refreshTree)
+    );
+
+    return watcher;
+  }
+
+  private registerConfigWatcher(globPattern: string): vscode.FileSystemWatcher {
+    const watcher = vscode.workspace.createFileSystemWatcher(globPattern);
+    const syncConfig = async (uri: vscode.Uri) => {
+      await this.handleConfigPathChange(uri.fsPath);
+    };
+
+    this.context.subscriptions.push(
+      watcher.onDidCreate(syncConfig),
+      watcher.onDidChange(syncConfig),
+      watcher.onDidDelete(syncConfig)
+    );
+
+    return watcher;
+  }
+
+  private async refreshSpecTree(): Promise<void> {
+    await this.treeProvider.refresh();
+    this.updateTreeViewMessage();
+  }
+
+  private updateTreeViewMessage(): void {
+    if (this.treeView === undefined) {
+      return;
+    }
+
+    const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+
+    if (workspaceFolders.length === 0) {
+      this.treeView.message = "Open a workspace folder to browse LiveSpec specs.";
+      return;
+    }
+
+    this.treeView.message = this.treeProvider.hasEntries()
+      ? ""
+      : "No LiveSpec specs found under the configured root spec directory.";
+  }
+
+  private async openSpec(target?: LiveSpecSpecEntry | LiveSpecTreeFileNode): Promise<void> {
+    const entry = target === undefined ? await this.pickSpec() : this.resolveSpecTarget(target);
+
+    if (entry === undefined) {
+      return;
+    }
+
+    const options: {
+      preview: boolean;
+      viewColumn?: vscode.ViewColumn;
+    } = {
+      preview: true
+    };
+
+    if (vscode.window.activeTextEditor?.viewColumn !== undefined) {
+      options.viewColumn = vscode.window.activeTextEditor.viewColumn;
+    }
+
+    await vscode.commands.executeCommand(
+      "vscode.openWith",
+      entry.uri,
+      LIVE_SPEC_VIEW_TYPE,
+      options
+    );
+  }
+
+  private async pickSpec(): Promise<LiveSpecSpecEntry | undefined> {
+    const snapshot = this.treeProvider.getSnapshot();
+
+    if (snapshot.entries.length === 0) {
+      return undefined;
+    }
+
+    const quickPickItems: LiveSpecQuickPickItem[] = snapshot.entries.map((entry) => ({
+      label: entry.fileName,
+      description: entry.relativePath,
+      ...(snapshot.repositories.length > 1
+        ? { detail: this.getRepositoryDetail(entry) }
+        : {}),
+      entry
+    }));
+    const selection = await vscode.window.showQuickPick(quickPickItems, {
+      title: "LiveSpec: Open Spec",
+      placeHolder: "Search specs by file name or path",
+      matchOnDescription: true,
+      matchOnDetail: true
+    });
+
+    return selection?.entry;
+  }
+
+  private resolveSpecTarget(target: LiveSpecSpecEntry | LiveSpecTreeFileNode): LiveSpecSpecEntry {
+    return "entry" in target ? target.entry : target;
+  }
+
+  private getRepositoryDetail(entry: LiveSpecSpecEntry): string {
+    return entry.repositoryName === entry.workspaceFolderName
+      ? entry.repositoryName
+      : `${entry.repositoryName} (${entry.workspaceFolderName})`;
+  }
+
+  private async revealActiveSpec(): Promise<void> {
+    if (this.treeView === undefined) {
+      return;
+    }
+
+    const activeUri =
+      this.registry.getActivePanel()?.document.uri ??
+      vscode.window.activeTextEditor?.document.uri;
+
+    if (activeUri === undefined) {
+      return;
+    }
+
+    let node = this.treeProvider.findNodeForUri(activeUri);
+
+    if (node === undefined) {
+      await this.refreshSpecTree();
+      node = this.treeProvider.findNodeForUri(activeUri);
+    }
+
+    if (node !== undefined) {
+      await this.treeView.reveal(node, {
+        focus: true,
+        select: true,
+        expand: true
+      });
+    }
+  }
 }
 
 export const activate = async (context: vscode.ExtensionContext): Promise<void> => {
@@ -285,4 +390,4 @@ export const activate = async (context: vscode.ExtensionContext): Promise<void> 
   await extension.activate();
 };
 
-export const deactivate = (): void => {};
+export const deactivate = (): void => { };

@@ -1,29 +1,119 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LIVE_SPEC_VIEW_TYPE } from "../src/constants.js";
+import {
+  COMMAND_IDS,
+  LIVE_SPEC_TREE_VIEW_ID,
+  LIVE_SPEC_VIEW_TYPE
+} from "../src/constants.js";
+import type { LiveSpecSpecEntry } from "../src/specIndex.js";
+import type { LiveSpecTreeFileNode } from "../src/specTree.js";
 import { LiveSpecExtension } from "../src/extension.js";
 
 const vscodeMock = vi.hoisted(() => {
+  const createDisposable = () => ({
+    dispose() { }
+  });
+  const commandHandlers = new Map<string, (...args: unknown[]) => unknown>();
+  const changeTextDocumentHandlers: Array<(event: unknown) => unknown> = [];
+  const openTextDocumentHandlers: Array<(document: unknown) => unknown> = [];
+  const closeTextDocumentHandlers: Array<(document: unknown) => unknown> = [];
+  const visibleTextEditorsHandlers: Array<(editors: unknown[]) => unknown> = [];
+  const activeColorThemeHandlers: Array<() => unknown> = [];
+  const watcherRegistrations: Array<{
+    pattern: string;
+    watcher: {
+      onDidCreate: ReturnType<typeof vi.fn>;
+      onDidChange: ReturnType<typeof vi.fn>;
+      onDidDelete: ReturnType<typeof vi.fn>;
+      dispose(): void;
+    };
+    createHandlers: Array<(uri: unknown) => unknown>;
+    changeHandlers: Array<(uri: unknown) => unknown>;
+    deleteHandlers: Array<(uri: unknown) => unknown>;
+  }> = [];
   const executeCommand = vi.fn();
   const showTextDocument = vi.fn();
-  const writeText = vi.fn();
-  const closeTabs = vi.fn();
-  const tabGroups = {
-    all: [] as Array<{ tabs: Array<{ input: unknown }> }>,
-    close: closeTabs
-  };
+  const showQuickPick = vi.fn();
+  const registerCommand = vi.fn((command: string, callback: (...args: unknown[]) => unknown) => {
+    commandHandlers.set(command, callback);
+    return createDisposable();
+  });
+  const registerCustomEditorProvider = vi.fn(() => createDisposable());
+  const onDidChangeTextDocument = vi.fn((handler: (event: unknown) => unknown) => {
+    changeTextDocumentHandlers.push(handler);
+    return createDisposable();
+  });
+  const onDidOpenTextDocument = vi.fn((handler: (document: unknown) => unknown) => {
+    openTextDocumentHandlers.push(handler);
+    return createDisposable();
+  });
+  const onDidCloseTextDocument = vi.fn((handler: (document: unknown) => unknown) => {
+    closeTextDocumentHandlers.push(handler);
+    return createDisposable();
+  });
+  const onDidChangeVisibleTextEditors = vi.fn((handler: (editors: unknown[]) => unknown) => {
+    visibleTextEditorsHandlers.push(handler);
+    return createDisposable();
+  });
+  const onDidChangeActiveColorTheme = vi.fn((handler: () => unknown) => {
+    activeColorThemeHandlers.push(handler);
+    return createDisposable();
+  });
+  const getWorkspaceFolder = vi.fn();
+  const findFiles = vi.fn().mockResolvedValue([]);
+  const createFileSystemWatcher = vi.fn((pattern: string) => {
+    const createHandlers: Array<(uri: unknown) => unknown> = [];
+    const changeHandlers: Array<(uri: unknown) => unknown> = [];
+    const deleteHandlers: Array<(uri: unknown) => unknown> = [];
+    const watcher = {
+      onDidCreate: vi.fn((handler: (uri: unknown) => unknown) => {
+        createHandlers.push(handler);
+        return createDisposable();
+      }),
+      onDidChange: vi.fn((handler: (uri: unknown) => unknown) => {
+        changeHandlers.push(handler);
+        return createDisposable();
+      }),
+      onDidDelete: vi.fn((handler: (uri: unknown) => unknown) => {
+        deleteHandlers.push(handler);
+        return createDisposable();
+      }),
+      dispose() { }
+    };
+
+    watcherRegistrations.push({
+      pattern,
+      watcher,
+      createHandlers,
+      changeHandlers,
+      deleteHandlers
+    });
+
+    return watcher;
+  });
+  const createTreeView = vi.fn(() => ({
+    message: undefined as string | undefined,
+    reveal: vi.fn().mockResolvedValue(undefined),
+    dispose() { }
+  }));
+
+  class EventEmitter<T> {
+    readonly event = vi.fn();
+    readonly fire = vi.fn<(value: T | undefined) => void>();
+    dispose() { }
+  }
 
   class Position {
     constructor(
       public readonly line: number,
       public readonly character: number
-    ) {}
+    ) { }
   }
 
   class Range {
     constructor(
       public readonly start: Position,
       public readonly end: Position
-    ) {}
+    ) { }
   }
 
   class Selection {
@@ -39,20 +129,111 @@ const vscodeMock = vi.hoisted(() => {
     }
   }
 
-  class TabInputText {
-    constructor(public readonly uri: { toString(): string }) {}
+  class TreeItem {
+    command?: unknown;
+    contextValue?: string;
+    description?: string;
+    resourceUri?: unknown;
+
+    constructor(
+      public readonly label: string,
+      public readonly collapsibleState: number
+    ) { }
   }
 
+  const clearCommands = () => {
+    commandHandlers.clear();
+    registerCommand.mockClear();
+  };
+
+  const clearEventRegistrations = () => {
+    changeTextDocumentHandlers.length = 0;
+    openTextDocumentHandlers.length = 0;
+    closeTextDocumentHandlers.length = 0;
+    visibleTextEditorsHandlers.length = 0;
+    activeColorThemeHandlers.length = 0;
+    onDidChangeTextDocument.mockClear();
+    onDidOpenTextDocument.mockClear();
+    onDidCloseTextDocument.mockClear();
+    onDidChangeVisibleTextEditors.mockClear();
+    onDidChangeActiveColorTheme.mockClear();
+  };
+
+  const clearWatchers = () => {
+    watcherRegistrations.length = 0;
+    createFileSystemWatcher.mockClear();
+  };
+
+  const getWatcher = (pattern: string) =>
+    watcherRegistrations.find((registration) => registration.pattern === pattern);
+
+  const fireWatcher = async (
+    pattern: string,
+    eventName: "create" | "change" | "delete",
+    uri: unknown
+  ) => {
+    const registration = getWatcher(pattern);
+
+    if (registration === undefined) {
+      throw new Error(`No watcher registered for ${pattern}`);
+    }
+
+    const handlers =
+      eventName === "create"
+        ? registration.createHandlers
+        : eventName === "change"
+          ? registration.changeHandlers
+          : registration.deleteHandlers;
+
+    for (const handler of handlers) {
+      await handler(uri);
+    }
+  };
+
+  const fireOpenTextDocument = async (document: unknown) => {
+    for (const handler of openTextDocumentHandlers) {
+      await handler(document);
+    }
+  };
+
+  const executeRegisteredCommand = async (command: string, ...args: unknown[]) => {
+    const handler = commandHandlers.get(command);
+
+    if (handler === undefined) {
+      throw new Error(`No command registered for ${command}`);
+    }
+
+    return handler(...args);
+  };
+
   return {
-    closeTabs,
+    clearCommands,
+    clearEventRegistrations,
+    clearWatchers,
+    createFileSystemWatcher,
+    createTreeView,
+    EventEmitter,
     executeCommand,
-    showTextDocument,
-    tabGroups,
-    writeText,
+    executeRegisteredCommand,
+    fireOpenTextDocument,
+    fireWatcher,
+    findFiles,
+    getWorkspaceFolder,
+    getWatcher,
+    onDidChangeActiveColorTheme,
+    onDidChangeTextDocument,
+    onDidChangeVisibleTextEditors,
+    onDidCloseTextDocument,
+    onDidOpenTextDocument,
     Position,
     Range,
+    registerCommand,
+    registerCustomEditorProvider,
     Selection,
-    TabInputText
+    showQuickPick,
+    showTextDocument,
+    TreeItem,
+    workspaceFolders: [] as Array<{ name: string; uri: { fsPath: string } }>
   };
 });
 
@@ -63,21 +244,22 @@ vi.mock("vscode", () => ({
     HighContrast: 3,
     HighContrastLight: 4
   },
+  commands: {
+    executeCommand: vscodeMock.executeCommand,
+    registerCommand: vscodeMock.registerCommand
+  },
+  EventEmitter: vscodeMock.EventEmitter,
   Position: vscodeMock.Position,
   Range: vscodeMock.Range,
   Selection: vscodeMock.Selection,
-  TabInputText: vscodeMock.TabInputText,
   TextEditorRevealType: {
     InCenterIfOutsideViewport: 1
   },
-  commands: {
-    executeCommand: vscodeMock.executeCommand,
-    registerCommand: vi.fn()
-  },
-  env: {
-    clipboard: {
-      writeText: vscodeMock.writeText
-    }
+  TreeItem: vscodeMock.TreeItem,
+  TreeItemCollapsibleState: {
+    None: 0,
+    Collapsed: 1,
+    Expanded: 2
   },
   window: {
     activeColorTheme: {
@@ -86,57 +268,45 @@ vi.mock("vscode", () => ({
     activeTextEditor: {
       viewColumn: 2
     },
-    tabGroups: vscodeMock.tabGroups,
+    createTreeView: vscodeMock.createTreeView,
+    onDidChangeActiveColorTheme: vscodeMock.onDidChangeActiveColorTheme,
+    onDidChangeVisibleTextEditors: vscodeMock.onDidChangeVisibleTextEditors,
+    registerCustomEditorProvider: vscodeMock.registerCustomEditorProvider,
+    showQuickPick: vscodeMock.showQuickPick,
     showTextDocument: vscodeMock.showTextDocument,
-    visibleTextEditors: [],
-    registerCustomEditorProvider: vi.fn(),
-    onDidChangeVisibleTextEditors: vi.fn(),
-    onDidChangeActiveColorTheme: vi.fn()
+    visibleTextEditors: []
   },
   workspace: {
-    getWorkspaceFolder: vi.fn(),
-    onDidOpenTextDocument: vi.fn(),
-    onDidChangeTextDocument: vi.fn(),
-    onDidCloseTextDocument: vi.fn()
-  },
-  ViewColumn: {
-    One: 1,
-    Two: 2,
-    Three: 3
+    createFileSystemWatcher: vscodeMock.createFileSystemWatcher,
+    findFiles: vscodeMock.findFiles,
+    getWorkspaceFolder: vscodeMock.getWorkspaceFolder,
+    onDidChangeTextDocument: vscodeMock.onDidChangeTextDocument,
+    onDidCloseTextDocument: vscodeMock.onDidCloseTextDocument,
+    onDidOpenTextDocument: vscodeMock.onDidOpenTextDocument,
+    workspaceFolders: vscodeMock.workspaceFolders
   }
 }));
 
-interface FakeDocument {
-  uri: {
-    scheme: string;
-    fsPath: string;
-    toString(): string;
-  };
-  languageId: string;
-}
+const createUri = (fsPath: string) => ({
+  scheme: "file",
+  fsPath,
+  path: fsPath,
+  toString: () => `file://${fsPath}`
+});
 
-interface FakeTab {
-  input: unknown;
-}
-
-const createDocument = (
-  overrides: Partial<FakeDocument> = {}
-): FakeDocument => {
-  const scheme = overrides.uri?.scheme ?? "file";
-  const fsPath = overrides.uri?.fsPath ?? "/workspace/specs/example.md";
-
-  return {
-    uri: {
-      scheme,
-      fsPath,
-      toString: () => `${scheme}://${fsPath}`
-    },
-    languageId: overrides.languageId ?? "markdown"
-  };
-};
-
-const createTextTab = (document: FakeDocument): FakeTab => ({
-  input: new vscodeMock.TabInputText(document.uri)
+const createSpecEntry = (
+  fsPath: string,
+  relativePath: string
+): LiveSpecSpecEntry => ({
+  id: `${fsPath}::${relativePath}`,
+  uri: createUri(fsPath) as never,
+  repositoryRoot: "/workspace",
+  repositoryName: "workspace",
+  workspaceFolderName: "workspace",
+  specRootDir: "specs",
+  relativePath,
+  fileName: relativePath.split("/").pop() ?? relativePath,
+  folderSegments: relativePath.split("/").slice(0, -1)
 });
 
 const createExtension = () =>
@@ -150,190 +320,313 @@ const createExtension = () =>
 
 describe("LiveSpecExtension", () => {
   beforeEach(() => {
-    vscodeMock.closeTabs.mockReset();
+    vscodeMock.clearCommands();
+    vscodeMock.clearEventRegistrations();
+    vscodeMock.clearWatchers();
+    vscodeMock.createTreeView.mockClear();
     vscodeMock.executeCommand.mockReset();
+    vscodeMock.findFiles.mockReset();
+    vscodeMock.findFiles.mockResolvedValue([]);
+    vscodeMock.getWorkspaceFolder.mockReset();
+    vscodeMock.registerCustomEditorProvider.mockClear();
+    vscodeMock.showQuickPick.mockReset();
     vscodeMock.showTextDocument.mockReset();
-    vscodeMock.writeText.mockReset();
-    vscodeMock.tabGroups.all = [];
+    vscodeMock.workspaceFolders.length = 0;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("auto-opens matching markdown files once and skips repeat attempts for the same URI", async () => {
+  it("opens a provided spec entry in the LiveSpec custom editor", async () => {
     const extension = createExtension();
-    const document = createDocument();
-    const textTab = createTextTab(document);
-
-    vscodeMock.tabGroups.all = [{ tabs: [textTab] }];
-
-    vi.spyOn(extension.registry, "hasOpenPanel").mockReturnValue(false);
-    vi.spyOn(extension, "resolveRepositoryContext").mockResolvedValue({
-      repositoryRoot: "/workspace",
-      config: {
-        version: 1,
-        specFileGlob: "**/specs/**/*.md"
-      }
-    });
+    const entry = createSpecEntry("/workspace/specs/alpha/spec.md", "alpha/spec.md");
 
     await (
-      extension as unknown as { maybeAutoOpen(document: FakeDocument): Promise<void> }
-    ).maybeAutoOpen(document);
+      extension as unknown as {
+        openSpec(target: LiveSpecSpecEntry): Promise<void>;
+      }
+    ).openSpec(entry);
 
     expect(vscodeMock.executeCommand).toHaveBeenCalledWith(
       "vscode.openWith",
-      document.uri,
+      entry.uri,
       LIVE_SPEC_VIEW_TYPE,
       {
-        preview: false,
+        preview: true,
         viewColumn: 2
       }
     );
-    expect(vscodeMock.closeTabs).toHaveBeenCalledWith([textTab], true);
-
-    await (
-      extension as unknown as { maybeAutoOpen(document: FakeDocument): Promise<void> }
-    ).maybeAutoOpen(document);
-
-    expect(vscodeMock.executeCommand).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    {
-      name: "documents outside the file scheme",
-      document: createDocument({
-        uri: {
-          scheme: "untitled",
-          fsPath: "/workspace/specs/example.md",
-          toString: () => "untitled:///workspace/specs/example.md"
-        }
-      }),
-      expectRepositoryLookup: false
-    },
-    {
-      name: "the checked-in LiveSpec config file",
-      document: createDocument({
-        uri: {
-          scheme: "file",
-          fsPath: "/workspace/.livespec/config.json",
-          toString: () => "file:///workspace/.livespec/config.json"
-        }
-      }),
-      expectRepositoryLookup: false
-    },
-    {
-      name: "non-matching markdown files",
-      document: createDocument({
-        uri: {
-          scheme: "file",
-          fsPath: "/workspace/docs/readme.md",
-          toString: () => "file:///workspace/docs/readme.md"
-        }
-      }),
-      expectRepositoryLookup: true
-    }
-  ])("skips auto-open for $name", async ({ document, expectRepositoryLookup }) => {
+  it("uses a Quick Pick launcher to select and open a spec", async () => {
     const extension = createExtension();
-    const resolveRepositoryContext = vi
-      .spyOn(extension, "resolveRepositoryContext")
-      .mockResolvedValue({
-        repositoryRoot: "/workspace",
-        config: {
-          version: 1,
-          specFileGlob: "**/specs/**/*.md"
+    const firstEntry = createSpecEntry("/workspace/specs/alpha/spec.md", "alpha/spec.md");
+    const secondEntry = createSpecEntry("/workspace/specs/beta/spec.md", "beta/spec.md");
+
+    vi.spyOn(extension.treeProvider, "getSnapshot").mockReturnValue({
+      repositories: [
+        {
+          id: "/workspace",
+          repositoryRoot: "/workspace",
+          repositoryName: "workspace",
+          workspaceFolderName: "workspace",
+          specRootDir: "specs",
+          entries: [firstEntry, secondEntry]
         }
-      });
-
-    vi.spyOn(extension.registry, "hasOpenPanel").mockReturnValue(false);
-
-    await (
-      extension as unknown as { maybeAutoOpen(document: FakeDocument): Promise<void> }
-    ).maybeAutoOpen(document);
-
-    if (expectRepositoryLookup) {
-      expect(resolveRepositoryContext).toHaveBeenCalledTimes(1);
-    } else {
-      expect(resolveRepositoryContext).not.toHaveBeenCalled();
-    }
-
-    expect(vscodeMock.executeCommand).not.toHaveBeenCalled();
-  });
-
-  it("skips auto-open when the document already has an open LiveSpec panel", async () => {
-    const extension = createExtension();
-
-    vi.spyOn(extension.registry, "hasOpenPanel").mockReturnValue(true);
-    const resolveRepositoryContext = vi.spyOn(extension, "resolveRepositoryContext");
-
-    await (
-      extension as unknown as { maybeAutoOpen(document: FakeDocument): Promise<void> }
-    ).maybeAutoOpen(createDocument());
-
-    expect(resolveRepositoryContext).not.toHaveBeenCalled();
-    expect(vscodeMock.executeCommand).not.toHaveBeenCalled();
-    expect(vscodeMock.closeTabs).not.toHaveBeenCalled();
-  });
-
-  it("opens the source document at the requested one-based line and preserves the view column", async () => {
-    const extension = createExtension();
-    const firstEditor = {
-      selection: undefined as unknown,
-      revealRange: vi.fn()
-    };
-    const secondEditor = {
-      selection: undefined as unknown,
-      revealRange: vi.fn()
-    };
-    const document = createDocument();
-
-    vscodeMock.showTextDocument
-      .mockResolvedValueOnce(firstEditor)
-      .mockResolvedValueOnce(secondEditor);
+      ],
+      entries: [firstEntry, secondEntry]
+    });
+    vscodeMock.showQuickPick.mockImplementation(async (items) => items[1]);
 
     await (
       extension as unknown as {
-        openSource(
-          document: FakeDocument,
-          line: number,
-          viewColumn: number | undefined
-        ): Promise<void>;
+        openSpec(): Promise<void>;
       }
-    ).openSource(document, 1, 3);
+    ).openSpec();
 
-    expect(vscodeMock.showTextDocument).toHaveBeenNthCalledWith(1, document, {
-      preview: false,
-      preserveFocus: false,
-      viewColumn: 3
-    });
-    expect((firstEditor.selection as { anchor: { line: number } }).anchor.line).toBe(0);
-    expect(firstEditor.revealRange).toHaveBeenCalledWith(
+    expect(vscodeMock.showQuickPick).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          label: "spec.md",
+          description: "alpha/spec.md",
+          entry: firstEntry
+        }),
+        expect.objectContaining({
+          label: "spec.md",
+          description: "beta/spec.md",
+          entry: secondEntry
+        })
+      ],
       expect.objectContaining({
-        start: expect.objectContaining({ line: 0 })
-      }),
-      1
+        title: "LiveSpec: Open Spec",
+        matchOnDescription: true,
+        matchOnDetail: true
+      })
+    );
+    expect(vscodeMock.executeCommand).toHaveBeenCalledWith(
+      "vscode.openWith",
+      secondEntry.uri,
+      LIVE_SPEC_VIEW_TYPE,
+      {
+        preview: true,
+        viewColumn: 2
+      }
+    );
+  });
+
+  it("uses human-readable repository labels in multi-repository Quick Pick details", async () => {
+    const extension = createExtension();
+    const firstEntry: LiveSpecSpecEntry = {
+      ...createSpecEntry("/workspace-a/specs/alpha/spec.md", "alpha/spec.md"),
+      repositoryRoot: "/workspace-a/packages/repo-a",
+      repositoryName: "repo-a",
+      workspaceFolderName: "workspace-a"
+    };
+    const secondEntry: LiveSpecSpecEntry = {
+      ...createSpecEntry("/workspace-b/specs/beta/spec.md", "beta/spec.md"),
+      repositoryRoot: "/workspace-b",
+      repositoryName: "workspace-b",
+      workspaceFolderName: "workspace-b"
+    };
+
+    vi.spyOn(extension.treeProvider, "getSnapshot").mockReturnValue({
+      repositories: [
+        {
+          id: firstEntry.repositoryRoot,
+          repositoryRoot: firstEntry.repositoryRoot,
+          repositoryName: firstEntry.repositoryName,
+          workspaceFolderName: firstEntry.workspaceFolderName,
+          specRootDir: "specs",
+          entries: [firstEntry]
+        },
+        {
+          id: secondEntry.repositoryRoot,
+          repositoryRoot: secondEntry.repositoryRoot,
+          repositoryName: secondEntry.repositoryName,
+          workspaceFolderName: secondEntry.workspaceFolderName,
+          specRootDir: "specs",
+          entries: [secondEntry]
+        }
+      ],
+      entries: [firstEntry, secondEntry]
+    });
+    vscodeMock.showQuickPick.mockImplementation(async (items) => items[0]);
+
+    await (
+      extension as unknown as {
+        openSpec(): Promise<void>;
+      }
+    ).openSpec();
+
+    expect(vscodeMock.showQuickPick).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          detail: "repo-a (workspace-a)"
+        }),
+        expect.objectContaining({
+          detail: "workspace-b"
+        })
+      ],
+      expect.anything()
+    );
+  });
+
+  it("reveals the active spec in the tree view", async () => {
+    const extension = createExtension();
+    const entry = createSpecEntry("/workspace/specs/alpha/spec.md", "alpha/spec.md");
+    const treeView = {
+      message: undefined as string | undefined,
+      reveal: vi.fn().mockResolvedValue(undefined),
+      dispose() { }
+    };
+    const fileNode: LiveSpecTreeFileNode = {
+      kind: "file",
+      id: entry.id,
+      label: entry.fileName,
+      entry
+    };
+
+    extension.treeView = treeView as never;
+    vi.spyOn(extension.registry, "getActivePanel").mockReturnValue({
+      document: {
+        uri: entry.uri
+      }
+    } as never);
+    vi.spyOn(extension.treeProvider, "findNodeForUri").mockReturnValue(fileNode);
+
+    await (
+      extension as unknown as {
+        revealActiveSpec(): Promise<void>;
+      }
+    ).revealActiveSpec();
+
+    expect(treeView.reveal).toHaveBeenCalledWith(fileNode, {
+      focus: true,
+      select: true,
+      expand: true
+    });
+  });
+
+  it("activates the tree view, shows an empty-workspace message, and does not register auto-open listeners", async () => {
+    const extension = createExtension();
+    const treeView = {
+      message: undefined as string | undefined,
+      reveal: vi.fn().mockResolvedValue(undefined),
+      dispose() { }
+    };
+
+    vscodeMock.createTreeView.mockReturnValue(treeView);
+
+    await extension.activate();
+
+    expect(vscodeMock.createTreeView).toHaveBeenCalledWith(LIVE_SPEC_TREE_VIEW_ID, {
+      treeDataProvider: extension.treeProvider,
+      showCollapseAll: true
+    });
+    expect(treeView.message).toBe("Open a workspace folder to browse LiveSpec specs.");
+    expect(extension.context.subscriptions).toContain(extension.treeProvider);
+    expect(vscodeMock.onDidOpenTextDocument).not.toHaveBeenCalled();
+    expect(vscodeMock.onDidChangeVisibleTextEditors).not.toHaveBeenCalled();
+  });
+
+  it("rebroadcasts config updates when the config watcher fires", async () => {
+    const extension = createExtension();
+    const treeView = {
+      message: undefined as string | undefined,
+      reveal: vi.fn().mockResolvedValue(undefined),
+      dispose() { }
+    };
+    const refreshSpy = vi.spyOn(extension.treeProvider, "refresh").mockResolvedValue(undefined);
+    const broadcastConfigSpy = vi.spyOn(extension.registry, "broadcastConfig");
+
+    vscodeMock.createTreeView.mockReturnValue(treeView);
+    vscodeMock.workspaceFolders.push({
+      name: "workspace",
+      uri: {
+        fsPath: "/workspace"
+      }
+    });
+
+    await extension.activate();
+
+    refreshSpy.mockClear();
+    broadcastConfigSpy.mockClear();
+
+    await vscodeMock.fireWatcher(
+      "**/.livespec/config.json",
+      "delete",
+      createUri("/workspace/.livespec/config.json")
     );
 
-    await (
-      extension as unknown as {
-        openSource(
-          document: FakeDocument,
-          line: number,
-          viewColumn: number | undefined
-        ): Promise<void>;
-      }
-    ).openSource(document, 5, undefined);
-
-    expect(vscodeMock.showTextDocument).toHaveBeenNthCalledWith(2, document, {
-      preview: false,
-      preserveFocus: false
-    });
-    expect((secondEditor.selection as { anchor: { line: number } }).anchor.line).toBe(4);
-    expect(secondEditor.revealRange).toHaveBeenCalledWith(
+    expect(broadcastConfigSpy).toHaveBeenCalledWith(
+      "/workspace",
       expect.objectContaining({
-        start: expect.objectContaining({ line: 4 })
-      }),
-      1
+        specRootDir: "specs"
+      })
+    );
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers markdown watchers without content-change refreshes", async () => {
+    const extension = createExtension();
+
+    await extension.activate();
+
+    const markdownWatcher = vscodeMock.getWatcher("**/*.md");
+    const configWatcher = vscodeMock.getWatcher("**/.livespec/config.json");
+
+    expect(markdownWatcher?.watcher.onDidCreate).toHaveBeenCalledTimes(1);
+    expect(markdownWatcher?.watcher.onDidChange).not.toHaveBeenCalled();
+    expect(markdownWatcher?.watcher.onDidDelete).toHaveBeenCalledTimes(1);
+    expect(configWatcher?.watcher.onDidCreate).toHaveBeenCalledTimes(1);
+    expect(configWatcher?.watcher.onDidChange).toHaveBeenCalledTimes(1);
+    expect(configWatcher?.watcher.onDidDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reopen specs when a normal document-open event fires", async () => {
+    const extension = createExtension();
+
+    await extension.activate();
+
+    vscodeMock.executeCommand.mockClear();
+
+    await vscodeMock.fireOpenTextDocument({
+      uri: createUri("/workspace/specs/alpha/spec.md"),
+      languageId: "markdown"
+    });
+
+    expect(vscodeMock.executeCommand).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the tree and updates the empty-state message from the refresh command", async () => {
+    const extension = createExtension();
+    const treeView = {
+      message: undefined as string | undefined,
+      reveal: vi.fn().mockResolvedValue(undefined),
+      dispose() { }
+    };
+    const refreshSpy = vi.spyOn(extension.treeProvider, "refresh").mockResolvedValue(undefined);
+
+    vi.spyOn(extension.treeProvider, "hasEntries").mockReturnValue(false);
+    vscodeMock.createTreeView.mockReturnValue(treeView);
+    vscodeMock.workspaceFolders.push({
+      name: "workspace",
+      uri: {
+        fsPath: "/workspace"
+      }
+    });
+
+    await extension.activate();
+
+    refreshSpy.mockClear();
+    treeView.message = undefined;
+
+    await vscodeMock.executeRegisteredCommand(COMMAND_IDS.refreshSpecTree);
+
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+    expect(treeView.message).toBe(
+      "No LiveSpec specs found under the configured root spec directory."
     );
   });
 });

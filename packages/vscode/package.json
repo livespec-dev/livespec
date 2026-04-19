@@ -12,18 +12,47 @@
   "main": "./dist/extension.cjs",
   "files": [
     "dist",
-    "webview/dist"
+    "webview/dist",
+    "media"
   ],
   "activationEvents": [
     "onStartupFinished",
+    "onCommand:livespec.openSpec",
+    "onCommand:livespec.refreshSpecTree",
+    "onCommand:livespec.revealActiveSpec",
     "onCommand:livespec.copySelectedIds",
     "onCommand:livespec.toggleIncompleteOnly",
     "onCommand:livespec.editSource",
     "onCommand:livespec.refresh",
-    "onCustomEditor:livespec.preview"
+    "onCustomEditor:livespec.preview",
+    "onView:livespec.specTree"
   ],
   "contributes": {
     "commands": [
+      {
+        "command": "livespec.openSpec",
+        "title": "LiveSpec: Open Spec...",
+        "icon": {
+          "light": "media/open-spec-light.svg",
+          "dark": "media/open-spec-dark.svg"
+        }
+      },
+      {
+        "command": "livespec.refreshSpecTree",
+        "title": "LiveSpec: Refresh Spec Tree",
+        "icon": {
+          "light": "media/refresh-spec-tree-light.svg",
+          "dark": "media/refresh-spec-tree-dark.svg"
+        }
+      },
+      {
+        "command": "livespec.revealActiveSpec",
+        "title": "LiveSpec: Reveal Active Spec",
+        "icon": {
+          "light": "media/reveal-active-spec-light.svg",
+          "dark": "media/reveal-active-spec-dark.svg"
+        }
+      },
       {
         "command": "livespec.copySelectedIds",
         "title": "LiveSpec: Copy Selected IDs"
@@ -52,7 +81,43 @@
         ],
         "priority": "option"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "livespec",
+          "title": "LiveSpec",
+          "icon": "media/livespec-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "livespec": [
+        {
+          "id": "livespec.specTree",
+          "name": "Specs"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "livespec.openSpec",
+          "when": "view == livespec.specTree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "livespec.refreshSpecTree",
+          "when": "view == livespec.specTree",
+          "group": "navigation@2"
+        },
+        {
+          "command": "livespec.revealActiveSpec",
+          "when": "view == livespec.specTree",
+          "group": "navigation@3"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "pnpm --filter @livespec/core build && pnpm run build:extension && pnpm run build:webview",
@@ -64,7 +129,6 @@
   },
   "dependencies": {
     "@livespec/core": "workspace:*",
-    "minimatch": "^10.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.0.0",

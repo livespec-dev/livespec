@@ -3,16 +3,16 @@ import path from "node:path";
 import { z } from "zod";
 
 export const DEFAULT_CONFIG_VERSION = 1;
-export const DEFAULT_SPEC_FILE_GLOB = "**/specs/**/*.md";
+export const DEFAULT_SPEC_ROOT_DIR = "specs";
 
 const configSchema = z.object({
   version: z.number().int().positive(),
-  specFileGlob: z.string().min(1).optional()
+  specRootDir: z.unknown().optional()
 });
 
 export interface LiveSpecConfig {
   version: number;
-  specFileGlob: string;
+  specRootDir: string;
 }
 
 export interface LoadLiveSpecConfigResult {
@@ -24,15 +24,44 @@ export interface LoadLiveSpecConfigResult {
 
 export const defaultLiveSpecConfig = (): LiveSpecConfig => ({
   version: DEFAULT_CONFIG_VERSION,
-  specFileGlob: DEFAULT_SPEC_FILE_GLOB
+  specRootDir: DEFAULT_SPEC_ROOT_DIR
 });
+
+const normalizePath = (value: string): string => value.replaceAll("\\", "/");
+
+export const normalizeSpecRootDir = (input: unknown): string => {
+  if (typeof input !== "string") {
+    return DEFAULT_SPEC_ROOT_DIR;
+  }
+
+  const trimmed = normalizePath(input.trim());
+
+  if (trimmed.length === 0) {
+    return DEFAULT_SPEC_ROOT_DIR;
+  }
+
+  const normalized = path.posix.normalize(trimmed);
+
+  if (
+    normalized.length === 0 ||
+    path.posix.isAbsolute(normalized) ||
+    normalized === ".." ||
+    normalized.startsWith("../")
+  ) {
+    return DEFAULT_SPEC_ROOT_DIR;
+  }
+
+  return normalized !== "." && normalized.endsWith("/")
+    ? normalized.slice(0, -1)
+    : normalized;
+};
 
 export const resolveLiveSpecConfig = (input: unknown): LiveSpecConfig => {
   const parsed = configSchema.parse(input);
 
   return {
     version: parsed.version,
-    specFileGlob: parsed.specFileGlob ?? DEFAULT_SPEC_FILE_GLOB
+    specRootDir: normalizeSpecRootDir(parsed.specRootDir)
   };
 };
 

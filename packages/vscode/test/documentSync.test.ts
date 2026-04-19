@@ -95,7 +95,7 @@ describe("LiveSpecPanelRegistry", () => {
       repositoryRoot: "/workspace",
       config: {
         version: 1,
-        specFileGlob: "**/specs/**/*.md"
+        specRootDir: "specs"
       }
     });
     registry.registerPanel({
@@ -104,7 +104,7 @@ describe("LiveSpecPanelRegistry", () => {
       repositoryRoot: "/workspace",
       config: {
         version: 1,
-        specFileGlob: "**/specs/**/*.md"
+        specRootDir: "specs"
       }
     });
 

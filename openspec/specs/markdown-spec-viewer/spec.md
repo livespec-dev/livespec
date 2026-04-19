@@ -5,15 +5,23 @@ Define how LiveSpec opens and renders matching spec markdown files in VS Code, i
 ## Requirements
 
 ### Requirement: LiveSpec opens matching spec markdown files
-The system SHALL provide a LiveSpec custom text editor for repository markdown files that match the effective spec-file glob.
+The system SHALL provide a LiveSpec custom text editor for repository spec markdown files and SHALL open a spec in LiveSpec when the user selects it from LiveSpec-owned navigation surfaces or explicitly chooses the LiveSpec editor.
 
-#### Scenario: Matching file opens in LiveSpec
-- **WHEN** a user opens a markdown file whose path matches the effective spec-file glob for its repository
-- **THEN** VS Code opens the file in the LiveSpec custom text editor
+#### Scenario: Tree selection opens a spec in LiveSpec
+- **WHEN** a user selects a discovered spec file from the LiveSpec tree
+- **THEN** VS Code opens that file in the LiveSpec custom text editor
 
-#### Scenario: Non-matching markdown stays in the normal editor
-- **WHEN** a user opens a markdown file whose path does not match the effective spec-file glob
+#### Scenario: Open Spec launcher opens a spec in LiveSpec
+- **WHEN** a user selects a discovered spec file from `LiveSpec: Open Spec...`
+- **THEN** VS Code opens that file in the LiveSpec custom text editor
+
+#### Scenario: Direct file open stays in the normal editor
+- **WHEN** a user opens a spec markdown file from Explorer, Quick Open, or another standard VS Code file-navigation surface
 - **THEN** the file remains in the normal text editor unless the user explicitly chooses LiveSpec
+
+#### Scenario: Explicit Open With uses LiveSpec
+- **WHEN** a user explicitly opens a spec markdown file with the LiveSpec editor
+- **THEN** VS Code opens the file in the LiveSpec custom text editor
 
 ### Requirement: LiveSpec renders markdown with document context
 The system SHALL render the opened spec markdown as a single-document preview with a compact toolbar that includes the file name and whole-document progress summary.
